@@ -309,7 +309,8 @@ int uthread_join(int tid, void **retval)
 	addToJoinQueue(threadTable[currentThreadIndex], tid);
 	while (threadTable[tid]->getState() != FINISHED){
 		uthread_suspend(uthread_self());
-		uthread_yield();
+		// called through suspend
+		// uthread_yield();
 	}
 	
 
@@ -331,8 +332,8 @@ int uthread_yield(void)
 	disableInterrupts();
 
 	TCB* runningThread = threadTable[currentThreadIndex];
-	// Move running thread onto the ready list. if it's blocked, it will be on blocked queue already instead
-	if (runningThread->getState != BLOCKED){
+	// Move running thread onto the ready list. if it's blocked, it will be on blocked queue already instead, if it's finished it will be on finished queue
+	if (runningThread->getState == RUNNING){
 		runningThread->setState(READY);
 		if (currentThreadIndex != 0)
 			addToReadyQueue(runningThread);
@@ -356,7 +357,6 @@ void uthread_exit(void *retval)
 	// Move any threads joined on this thread back to the ready queue
 	// Move this thread to the finished queue
 
-	// unfinihsed
 	TCB* tcb = threadTable[currentThreadIndex];
 	tcb->setState(FINISHED);
 	addToFinishedQueue(tcb, retval);
@@ -366,8 +366,8 @@ void uthread_exit(void *retval)
 	{
 		if (tid == (*iter)->waiting_for_tid)
 		{
-			TCB* blockedTCB = (*iter)->tcb;
-			blockedTCB->setState(READY);
+			uthread_resume(tid);
+			joinQueue.erase(iter);
 		}
 	}
 
