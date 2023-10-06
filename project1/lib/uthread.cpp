@@ -80,6 +80,14 @@ void addToReadyQueue(TCB *tcb)
 	ready_queue.push_back(tcb);
 }
 
+void addToJoinQueue(TCB *tcb, int tid)
+{
+	join_queue_entry* entry;
+	entry->tcb = tcb;
+	entry->waiting_for_tid = tid;
+	joinQueue.push_back(entry);
+}
+
 void addToFinishedQueue(TCB *tcb, void* result)
 {
 	finished_queue_entry_t* entry;
@@ -148,6 +156,23 @@ int removeFromReadyQueue(int tid)
 	return -1;
 }
 
+TCB* removeFromFinishedQueue(int tid)
+{
+
+	for (deque<TCB *>::iterator iter = finishedQueue.begin(); iter != finishedQueue.end(); ++iter)
+	{
+		if (tid == (*iter)->getId())
+		{
+			TCB* finishedTCB = *iter;
+			finishedQueue.erase(iter);
+			return finishedTCB;
+		}
+	}
+
+	// Thread not found
+	return NULL;
+}
+
 TCB* removeFromBlockedQueue(int tid)
 {
 
@@ -163,18 +188,6 @@ TCB* removeFromBlockedQueue(int tid)
 
 	// Thread not found
 	return NULL;
-}
-
-template <typename T>
-bool checkIfPresent(std::deque<T>& deque) {
-    for (deque<T>::iterator iter = deque.begin(); iter != deque.end(); ++iter)
-	{
-		if (tid == (*iter)->getId())
-		{
-			return true;
-		}
-	}
-	return false;
 }
 
 // Helper functions ------------------------------------------------------------
@@ -292,16 +305,23 @@ int uthread_join(int tid, void **retval)
 	// If the thread specified by tid is already terminated, just return
 	// If the thread specified by tid is still running, block until it terminates
 	// Set *retval to be the result of thread if retval != nullptr
-	uthread_suspend(uthread_self());
-
-	while (threadTable[tid]->getState() != FINISHED){
-		
+	if (threadTable[tid]->getState() == FINISHED){
+		return 0;
 	}
-	finished_queue_entry_t* finishedTCB;
-	while ((finishedTCB = popFromFinishedQueue()) != NULL) {
-		delete finishedTCB->tcb;
+
+	addToJoinQueue(threadTable[currentThreadIndex], tid);
+	while (threadTable[tid]->getState() != FINISHED){
+		uthread_suspend(uthread_self());
+		uthread_yield();
 	}
 	
+
+	finished_queue_entry_t* finishedEntryTCB = removeFromFinishedQueue(tid);
+	TCB* finishedTCB = finishedEntryTCB->tcb;
+	retval = finishedEntryTCB->result;
+
+	// Delete exited thread, will prob have to account for possible deletion in other thread
+
 }
 
 int uthread_yield(void)
@@ -335,11 +355,20 @@ void uthread_exit(void *retval)
 
 	// unfinihsed
 	TCB* tcb = threadTable[currentThreadIndex];
+	tcb->setState(FINISHED);
 	addToFinishedQueue(tcb, retval);
 
-	// uthread_yield();
 
-	
+	for (deque<join_queue_entry_t>::iterator iter = joinQueue.begin(); iter != joinQueue.end(); ++iter)
+	{
+		if (tid == (*iter)->waiting_for_tid)
+		{
+			TCB* blockedTCB = (*iter)->tcb;
+			blockedTCB->setState(READY);
+		}
+	}
+
+	uthread_yield();
 }
 
 int uthread_suspend(int tid)
@@ -364,7 +393,6 @@ int uthread_suspend(int tid)
 int uthread_resume(int tid)
 {
 	// Move the thread specified by tid back to the ready queue
-
 	TCB* resumeThread = removeFromBlockedQueue(tid);
 	if (resumeThread == NULL)	return -1;
 	resumeThread->setState(READY);

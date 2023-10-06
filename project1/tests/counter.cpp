@@ -6,18 +6,22 @@
 using namespace std;
 
 #define DEFAULT_TIME_SLICE 1000
-#define MAX_COUNT 10
+#define MAX_COUNT 6
 #define NUM_THREADS 3
 
 void *worker(void *arg) {
 	/* Retrieve our thread ID */
 	int my_tid = uthread_self();
+	int ret_val = 0;
 	for (int i = 0; i < MAX_COUNT; i++){
 		printf("From thread : %d, count: %d\n", my_tid, i);
-		if (i != 0 && i % 5 == 0){
+		if (i != 0 && i % 3 == 0){
 			uthread_yield();
-		} } 
-	}
+		} 
+		ret_val++;
+	} 
+	uthread_exit(&ret_val);
+}
 
 int main(int argc, char *argv[]){
 	/* Initialize the default time slice (only overridden if passed in) */
@@ -41,6 +45,14 @@ int main(int argc, char *argv[]){
 	}
 
 	uthread_yield();
+
+	int ret_val = 0;
+	for (int i = 0; i < NUM_THREADS; i++){
+		int val;
+		uthread_join(threads[i], &val);
+		ret_val += val;
+	}
+	printf("Final calculated value: %d", ret_val);
 
 	return 0;
 }
