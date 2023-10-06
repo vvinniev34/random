@@ -54,5 +54,8 @@ int main(int argc, char *argv[]){
 	}
 	printf("Final calculated value: %d", ret_val);
 
+	uthread_exit();
+	printf("Main thread not exited correctly");
+
 	return 0;
 }

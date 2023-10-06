@@ -98,7 +98,7 @@ void addToFinishedQueue(TCB *tcb, void* result)
 
 void addToBlockedQueue(TCB *tcb)
 {
-	blockedQueue.push_back(entry);
+	blockedQueue.push_back(tcb);
 }
 
 // Removes and returns the first TCB on the ready queue
@@ -292,9 +292,6 @@ int uthread_create(void *(*start_routine)(void *), void *arg)
 	threadTable[totalThreads] = tcb;
 	totalThreads++;
 
-	// Create another stack frame so that thread_switch works correctly.
-	// This routine is explained later in the chapter.
-	// thread_dummySwitchFrame(tcb);
 	addToReadyQueue(tcb);
 
 	return tcb->getId();
@@ -318,10 +315,14 @@ int uthread_join(int tid, void **retval)
 
 	finished_queue_entry_t* finishedEntryTCB = removeFromFinishedQueue(tid);
 	TCB* finishedTCB = finishedEntryTCB->tcb;
-	retval = finishedEntryTCB->result;
+	if (retval != nullptr){
+		retval = finishedEntryTCB->result;
+	}
 
 	// Delete exited thread, will prob have to account for possible deletion in other thread
+	delete finishedTCB;
 
+	return 0;
 }
 
 int uthread_yield(void)
@@ -330,10 +331,12 @@ int uthread_yield(void)
 	disableInterrupts();
 
 	TCB* runningThread = threadTable[currentThreadIndex];
-	// Move running thread onto the ready list.
-	runningThread->setState(READY);
-	if (currentThreadIndex != 0)
-		addToReadyQueue(runningThread);
+	// Move running thread onto the ready list. if it's blocked, it will be on blocked queue already instead
+	if (runningThread->getState != BLOCKED){
+		runningThread->setState(READY);
+		if (currentThreadIndex != 0)
+			addToReadyQueue(runningThread);
+	}
 	switchThreads(); // Switch to the new thread.
 	runningThread->setState(RUNNING);
 
